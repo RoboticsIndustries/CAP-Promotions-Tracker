@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAP Cadet Promotions Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Libre+Franklin:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --red:        #b81c2e;
+  --red-dark:   #8c1522;
+  --red-muted:  #f2e4e6;
+  --ink:        #111214;
+  --ink-2:      #2e3138;
+  --ink-3:      #5a5f6b;
+  --ink-4:      #9098a8;
+  --rule:       #d8dde6;
+  --rule-light: #ebeef4;
+  --paper:      #f9f8f6;
+  --white:      #ffffff;
+  --blue:       #1a3a6b;
+  --green:      #1d6b3a;
+  --mono:       'JetBrains Mono', monospace;
+  --serif:      'Playfair Display', Georgia, serif;
+  --sans:       'Libre Franklin', sans-serif;
+}
+html { font-size: 15px; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-weight: 400; min-height: 100vh; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
+
+/* ── HEADER ── */
+header { background: var(--white); border-bottom: 1px solid var(--rule); position: sticky; top: 0; z-index: 100; }
+.header-stripe { height: 4px; background: var(--red); }
+.header-inner { max-width: 1360px; margin: 0 auto; padding: 0 2rem; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.header-brand { display: flex; align-items: center; gap: 0.85rem; }
+.cap-logo { width: 32px; height: 32px; border: 2px solid var(--red); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cap-logo svg { width: 18px; height: 18px; }
+.header-title h1 { font-family: var(--sans); font-weight: 700; font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); line-height: 1; }
+.header-title p { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-4); letter-spacing: 0.04em; }
+.header-meta-item span { display: block; font-family: var(--mono); font-size: 0.6rem; color: var(--ink-4); letter-spacing: 0.06em; text-transform: uppercase; }
+.header-meta-item strong { font-family: var(--sans); font-weight: 600; font-size: 0.72rem; color: var(--ink-2); letter-spacing: 0.02em; }
+
+/* ── MAIN ── */
+main { flex: 1; max-width: 1360px; width: 100%; margin: 0 auto; padding: 2rem; }
+
+/* ── TABS ── */
+.mode-tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--rule); }
+.mode-tab { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.6rem 1.2rem; cursor: pointer; border: 1px solid transparent; border-bottom: none; color: var(--ink-4); background: transparent; margin-bottom: -1px; transition: all 0.12s; }
+.mode-tab.active { border-color: var(--rule); border-bottom-color: var(--white); background: var(--white); color: var(--ink); }
+.mode-tab:hover:not(.active) { color: var(--ink-2); }
+.mode-panel { display: none; }
+.mode-panel.active { display: block; }
+
+/* ── DROP ZONE ── */
+.drop-zone {
+  border: 2px dashed var(--rule);
+  background: var(--white);
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  margin-bottom: 1rem;
+}
+.drop-zone.dragging { border-color: var(--red); background: var(--red-muted); }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-icon { width: 40px; height: 40px; margin: 0 auto 0.75rem; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--rule); }
+.drop-icon svg { width: 20px; height: 20px; stroke: var(--ink-3); fill: none; }
+.drop-title { font-family: var(--sans); font-weight: 600; font-size: 0.88rem; color: var(--ink-2); margin-bottom: 0.25rem; }
+.drop-sub { font-family: var(--mono); font-size: 0.65rem; color: var(--ink-4); letter-spacing: 0.04em; }
+.drop-sub strong { color: var(--red); font-weight: 500; }
+.drop-hint { font-family: var(--mono); font-size: 0.6rem; color: var(--ink-4); margin-top: 0.85rem; letter-spacing: 0.04em; }
+
+.file-loaded-bar {
+  background: var(--white);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--green);
+  padding: 0.75rem 1.25rem;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.file-loaded-bar.show { display: flex; }
+.file-loaded-name { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-2); }
+.file-loaded-name span { color: var(--green); }
+
+/* ── INPUT PANEL ── */
+.input-panel { background: var(--white); border: 1px solid var(--rule); border-left: 3px solid var(--red); padding: 1.5rem 1.75rem; margin-bottom: 1rem; }
+.panel-label { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+.panel-label::after { content: ''; flex: 1; height: 1px; background: var(--rule-light); }
+.input-layout { display: grid; grid-template-columns: 1fr auto; gap: 1.25rem; align-items: start; }
+textarea { width: 100%; font-family: var(--mono); font-size: 0.78rem; line-height: 1.8; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); padding: 0.85rem 1rem; resize: vertical; min-height: 120px; outline: none; letter-spacing: 0.02em; transition: border-color 0.15s; }
+textarea:focus { border-color: var(--ink-3); background: var(--white); }
+textarea::placeholder { color: var(--ink-4); }
+.hint-row { margin-top: 0.6rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.hint { font-family: var(--mono); font-size: 0.6rem; color: var(--ink-4); background: var(--rule-light); border: 1px solid var(--rule); padding: 0.2rem 0.5rem; letter-spacing: 0.03em; }
+.actions { display: flex; flex-direction: column; gap: 0.5rem; min-width: 148px; }
+.btn { font-family: var(--sans); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; border: none; padding: 0.62rem 1.1rem; cursor: pointer; transition: all 0.12s; text-align: center; }
+.btn-primary { background: var(--red); color: var(--white); }
+.btn-primary:hover { background: var(--red-dark); }
+.btn-ghost { background: transparent; color: var(--ink-3); border: 1px solid var(--rule); }
+.btn-ghost:hover { border-color: var(--ink-3); color: var(--ink); }
+
+/* ── ROSTER HEADER ── */
+.roster-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--rule); flex-wrap: wrap; gap: 1rem; }
+.roster-title { font-family: var(--serif); font-size: 1.5rem; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.roster-title span { color: var(--red); }
+.roster-stats { display: flex; gap: 1.5rem; }
+.rstat { text-align: right; }
+.rstat-n { font-family: var(--mono); font-size: 1.1rem; font-weight: 500; color: var(--ink); line-height: 1; display: block; }
+.rstat-l { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-4); }
+
+/* ── FILTER ── */
+.filter-row { display: flex; align-items: center; gap: 0.35rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.filter-label { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-4); margin-right: 0.25rem; }
+.ftag { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; padding: 0.22rem 0.65rem; border: 1px solid var(--rule); background: var(--white); color: var(--ink-3); cursor: pointer; transition: all 0.12s; }
+.ftag:hover { border-color: var(--ink-3); color: var(--ink); }
+.ftag.active { background: var(--ink); border-color: var(--ink); color: var(--white); }
+
+/* ── GRID ── */
+.cadet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1.25rem; }
+
+/* ── CARD ── */
+.cadet-card { background: var(--white); border: 1px solid var(--rule); border-left: 3px solid var(--blue); transition: box-shadow 0.15s; animation: fadeUp 0.22s ease both; }
+.cadet-card.officer { border-left-color: var(--red); }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.cadet-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+
+.card-top { padding: 1rem 1.25rem 0.75rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--rule-light); }
+.cadet-name { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; color: var(--ink); letter-spacing: 0.01em; line-height: 1.2; }
+.cadet-sub { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.2rem; flex-wrap: wrap; }
+.cadet-rank-full { font-family: var(--mono); font-size: 0.63rem; color: var(--ink-3); letter-spacing: 0.04em; }
+.capid-badge { font-family: var(--mono); font-size: 0.58rem; color: var(--ink-4); background: var(--rule-light); padding: 0.1rem 0.35rem; letter-spacing: 0.04em; }
+.rank-abbr { font-family: var(--mono); font-weight: 500; font-size: 0.78rem; color: var(--ink); letter-spacing: 0.04em; background: var(--paper); border: 1px solid var(--rule); padding: 0.2rem 0.5rem; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+.officer .rank-abbr { background: var(--red-muted); border-color: rgba(184,28,46,0.25); color: var(--red-dark); }
+
+.card-meta { padding: 0.55rem 1.25rem; display: flex; align-items: center; justify-content: space-between; background: var(--paper); border-bottom: 1px solid var(--rule-light); flex-wrap: wrap; gap: 0.3rem; }
+.achievement-label { font-family: var(--sans); font-weight: 600; font-size: 0.72rem; color: var(--ink-2); letter-spacing: 0.02em; }
+.card-meta-right { display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem; }
+.next-rank-label { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-4); letter-spacing: 0.04em; }
+.next-rank-label strong { color: var(--blue); font-weight: 500; }
+.officer .next-rank-label strong { color: var(--red); }
+.next-approval { font-family: var(--mono); font-size: 0.6rem; color: var(--ink-4); letter-spacing: 0.04em; }
+.next-approval strong { color: var(--ink-3); font-weight: 500; }
+
+.prog-bar-wrap { height: 2px; background: var(--rule-light); }
+.prog-bar-fill { height: 100%; background: var(--blue); transition: width 0.4s ease; }
+.officer .prog-bar-fill { background: var(--red); }
+
+.req-list { padding: 0.75rem 1.25rem; }
+.req-section-head { font-family: var(--mono); font-size: 0.57rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-4); padding: 0.55rem 0 0.3rem; border-top: 1px solid var(--rule-light); margin-top: 0.1rem; }
+.req-section-head:first-child { padding-top: 0.1rem; border-top: none; }
+.req-row { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.28rem 0; cursor: pointer; user-select: none; transition: background 0.1s; }
+.req-row.static { cursor: default; }
+.req-row:not(.static):hover { background: var(--paper); margin: 0 -0.25rem; padding-left: 0.25rem; padding-right: 0.25rem; }
+.req-box { width: 14px; height: 14px; border: 1.5px solid var(--rule); flex-shrink: 0; margin-top: 2px; background: var(--white); display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
+.req-row.done .req-box { background: var(--green); border-color: var(--green); }
+.req-row.done .req-box::after { content: ''; display: block; width: 7px; height: 4px; border-left: 1.5px solid #fff; border-bottom: 1.5px solid #fff; transform: rotate(-45deg) translate(0.5px, -0.5px); }
+.req-text { font-family: var(--sans); font-size: 0.77rem; color: var(--ink-2); line-height: 1.45; flex: 1; font-weight: 400; transition: color 0.12s; }
+.req-row.done .req-text { color: var(--ink-4); text-decoration: line-through; text-decoration-color: var(--rule); }
+.req-detail { font-family: var(--mono); font-size: 0.6rem; color: var(--ink-4); margin-left: auto; flex-shrink: 0; align-self: center; white-space: nowrap; }
+.req-row.done .req-detail { color: var(--green); }
+
+.card-foot { padding: 0.55rem 1.25rem; border-top: 1px solid var(--rule-light); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.card-foot-count { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-4); }
+.card-foot-pct { font-family: var(--mono); font-weight: 500; font-size: 0.72rem; color: var(--ink-3); letter-spacing: 0.02em; }
+.card-foot-pct.complete { color: var(--green); }
+.reset-link { background: none; border: none; font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; color: var(--ink-4); cursor: pointer; text-transform: uppercase; padding: 0; transition: color 0.12s; }
+.reset-link:hover { color: var(--red); }
+
+/* ── EMPTY ── */
+.empty-state { grid-column: 1 / -1; padding: 4rem 2rem; text-align: center; border: 1px dashed var(--rule); background: var(--white); }
+.empty-state h3 { font-family: var(--sans); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.empty-state p { font-family: var(--sans); font-size: 0.82rem; color: var(--ink-4); margin-top: 0.5rem; }
+
+/* ── FOOTER ── */
+footer { background: var(--white); border-top: 1px solid var(--rule); margin-top: auto; }
+.footer-inner { max-width: 1360px; margin: 0 auto; padding: 0.9rem 2rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+.footer-credit { font-family: var(--sans); font-size: 0.72rem; color: var(--ink-3); }
+.footer-credit strong { font-weight: 600; color: var(--ink-2); }
+.footer-unit { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-4); }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 1.25rem; right: 1.25rem; background: var(--ink); color: var(--white); font-family: var(--sans); font-size: 0.75rem; padding: 0.65rem 1rem; z-index: 999; opacity: 0; transform: translateY(6px); transition: all 0.2s; pointer-events: none; border-left: 3px solid var(--red); max-width: 320px; }
+.toast.show { opacity: 1; transform: translateY(0); }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--rule); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-stripe"></div>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="cap-logo">
+        <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="9,1 11,6.5 17,7 13,11 14.5,17 9,14 3.5,17 5,11 1,7 7,6.5" fill="none" stroke="#b81c2e" stroke-width="1.3"/>
+        </svg>
+      </div>
+      <div class="header-title">
+        <h1>Civil Air Patrol &mdash; Cadet Promotions Tracker</h1>
+        <p>USAF Auxiliary &bull; Cadet Program</p>
+      </div>
+    </div>
+    <div class="header-meta">
+      <div class="header-meta-item">
+        <span>Squadron</span>
+        <strong>Brandywine Composite</strong>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" onclick="switchTab('file', this)">E-Services Report</button>
+    <button class="mode-tab" onclick="switchTab('manual', this)">Manual Entry</button>
+  </div>
+
+  <!-- FILE TAB -->
+  <div id="tab-file" class="mode-panel active">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFileSelect(this.files[0])">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+        </svg>
+      </div>
+      <div class="drop-title">Drop your e-services report here</div>
+      <div class="drop-sub">Drag and drop <strong>Cadet_Full_Track_Report.xlsx</strong> or click to browse</div>
+      <div class="drop-hint">Export from e-Services: Reports &rarr; Cadet Program &rarr; Full Track Report</div>
+    </div>
+    <div class="file-loaded-bar" id="fileLoadedBar">
+      <div class="file-loaded-name"><span id="fileLoadedName"></span></div>
+      <button class="btn btn-ghost" style="font-size:0.65rem;padding:0.35rem 0.75rem" onclick="clearFile()">Remove File</button>
+    </div>
+  </div>
+
+  <!-- MANUAL TAB -->
+  <div id="tab-manual" class="mode-panel">
+    <div class="input-panel">
+      <div class="panel-label">Manual Roster Entry</div>
+      <div class="input-layout">
+        <div>
+          <textarea id="rosterInput" rows="5" placeholder="Paste cadet roster here, one per line.
+
+  Smith, Jordan — C/SrA
+  Patel, Anika - C/SSgt
+  Nguyen, Marcus — C/CMSgt"></textarea>
+          <div class="hint-row">
+            <span class="hint">Format: Name — Rank &nbsp;or&nbsp; Name, Rank</span>
+            <span class="hint">Ranks: C/AB C/Amn C/A1C C/SrA C/SSgt C/TSgt C/MSgt C/SMSgt C/CMSgt C/2d Lt C/1st Lt C/Capt C/Maj C/Lt Col C/Col</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="parseManual()">Generate Trackers</button>
+          <button class="btn btn-ghost" onclick="loadSample()">Sample Roster</button>
+          <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROSTER OUTPUT -->
+  <div id="rosterHeader" style="display:none">
+    <div class="roster-header">
+      <div class="roster-title">Active <span>Tracker</span></div>
+      <div class="roster-stats">
+        <div class="rstat"><span class="rstat-n" id="sTotal">0</span><span class="rstat-l">Cadets</span></div>
+        <div class="rstat"><span class="rstat-n" id="sEnl">0</span><span class="rstat-l">Enlisted</span></div>
+        <div class="rstat"><span class="rstat-n" id="sOff">0</span><span class="rstat-l">Officers</span></div>
+        <div class="rstat"><span class="rstat-n" id="sReqs">0</span><span class="rstat-l">Requirements</span></div>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">Show:</span>
+      <button class="ftag active" onclick="doFilter('all',this)">All Cadets</button>
+      <button class="ftag" onclick="doFilter('enlisted',this)">Enlisted Only</button>
+      <button class="ftag" onclick="doFilter('officer',this)">Officers Only</button>
+      <button class="ftag" onclick="doFilter('inprog',this)">In Progress</button>
+    </div>
+  </div>
+
+  <div class="cadet-grid" id="grid">
+    <div class="empty-state">
+      <h3>No Roster Loaded</h3>
+      <p>Drop an e-services report above, or use the Manual Entry tab.</p>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span class="footer-credit">Made by <strong>Aryan Mitra</strong> &mdash; Brandywine Cadet Squadron</span>
+    <span class="footer-unit">Civil Air Patrol &bull; United States Air Force Auxiliary &bull; Cadet Program</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATIC DATA ─────────────────────────────────────────────────────────────
+const RANK_FULL = {
+  'C/AB':'Cadet Airman Basic','C/Amn':'Cadet Airman','C/A1C':'Cadet Airman First Class',
+  'C/SrA':'Cadet Senior Airman','C/SSgt':'Cadet Staff Sergeant','C/TSgt':'Cadet Technical Sergeant',
+  'C/MSgt':'Cadet Master Sergeant','C/SMSgt':'Cadet Senior Master Sergeant','C/CMSgt':'Cadet Chief Master Sergeant',
+  'C/2d Lt':'Cadet Second Lieutenant','C/1st Lt':'Cadet First Lieutenant','C/Capt':'Cadet Captain',
+  'C/Maj':'Cadet Major','C/Lt Col':'Cadet Lieutenant Colonel','C/Col':'Cadet Colonel',
+};
+const OFFICER = ['C/2d Lt','C/1st Lt','C/Capt','C/Maj','C/Lt Col','C/Col'];
+const CAT_NAMES = { ae:'Aerospace Education', lead:'Leadership', fit:'Physical Fitness', char:'Character Development', spec:'Special Requirements' };
+
+// Map from e-services AchvName → current rank
+const ACHV_TO_RANK = {
+  'achievement 1':            'C/AB',
+  'achievement 2':            'C/Amn',
+  'achievement 3':            'C/A1C',
+  'achievement 4':            'C/SrA',
+  'achievement 5':            'C/SSgt',
+  'achievement 6':            'C/TSgt',
+  'achievement 7':            'C/MSgt',
+  'achievement 8':            'C/SMSgt',
+  'achievement 9':            'C/CMSgt',
+  'billy mitchell':           'C/CMSgt',
+  'amelia earhart':           'C/2d Lt',
+  'earhart':                  'C/2d Lt',
+  'achievement 11':           'C/1st Lt',
+  'doolittle':                'C/Capt',
+  'james h. doolittle':       'C/Capt',
+  'james doolittle':          'C/Capt',
+  'eaker':                    'C/Maj',
+  'gen ira c eaker':          'C/Maj',
+  'gen. ira c. eaker':        'C/Maj',
+  'gen. ira c. eaker award':  'C/Maj',
+  'spaatz':                   'C/Lt Col',
+  'gen. carl a. spaatz':      'C/Lt Col',
+  'gen carl a spaatz':        'C/Lt Col',
+};
+
+const PROMOTIONS = {
+  'C/AB':    { achievement:'Wright Brothers Achievement',  next:'C/Amn'    },
+  'C/Amn':   { achievement:'Achievement 2',                next:'C/A1C'    },
+  'C/A1C':   { achievement:'Achievement 3',                next:'C/SrA'    },
+  'C/SrA':   { achievement:'Achievement 4',                next:'C/SSgt'   },
+  'C/SSgt':  { achievement:'Achievement 5',                next:'C/TSgt'   },
+  'C/TSgt':  { achievement:'Achievement 6',                next:'C/MSgt'   },
+  'C/MSgt':  { achievement:'Achievement 7',                next:'C/SMSgt'  },
+  'C/SMSgt': { achievement:'Achievement 8',                next:'C/CMSgt'  },
+  'C/CMSgt': { achievement:'Billy Mitchell Award',         next:'C/2d Lt'  },
+  'C/2d Lt': { achievement:'Amelia Earhart Award',         next:'C/1st Lt' },
+  'C/1st Lt':{ achievement:'Achievement 11',               next:'C/Capt'   },
+  'C/Capt':  { achievement:'James H. Doolittle Award',     next:'C/Maj'    },
+  'C/Maj':   { achievement:'Gen. Ira C. Eaker Award',      next:'C/Lt Col' },
+  'C/Lt Col':{ achievement:'Gen. Carl A. Spaatz Award',    next:'C/Col'    },
+  'C/Col':   { achievement:'Highest Cadet Grade',          next:null       },
+};
+
+// Static requirements per rank (for manual mode)
+const STATIC_REQS = {
+  'C/AB':    [{cat:'char',text:'Cadet Oath'},{cat:'lead',text:'Welcome Course'},{cat:'lead',text:'Leadership Expectations'},{cat:'lead',text:'Uniform Inspection'},{cat:'ae',text:'Aerospace Education Module 1 — Introduction to Aerospace'},{cat:'lead',text:'Leadership Module 1 — Authority and Followership'},{cat:'fit',text:'Physical Fitness Test (CPFT)'},{cat:'char',text:'Character Forum 1 — Foundations of Character'},{cat:'lead',text:'Active Participation'}],
+  'C/Amn':   [{cat:'ae',text:'Aerospace Education Module 2 — The Science of Flight'},{cat:'lead',text:'Leadership Module 2 — Drill and Ceremonies'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 2 — Integrity First'},{cat:'lead',text:'Active Participation'}],
+  'C/A1C':   [{cat:'ae',text:'Aerospace Education Module 3 — Airports and Airspace'},{cat:'lead',text:'Leadership Module 3 — Team Leadership'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 3 — Service Before Self'},{cat:'lead',text:'Active Participation'}],
+  'C/SrA':   [{cat:'ae',text:'Aerospace Education Module 4 — Aviation Weather'},{cat:'lead',text:'Leadership Module 4 — Communication Skills'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 4 — Excellence in All We Do'},{cat:'lead',text:'Active Participation'}],
+  'C/SSgt':  [{cat:'ae',text:'Aerospace Education Module 5 — Navigation'},{cat:'lead',text:'Leadership Module 5 — Problem Solving and Decision Making'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 5 — Leadership Ethics'},{cat:'lead',text:'Active Participation'},{cat:'lead',text:'Drill Evaluation'},{cat:'ae',text:'AE Interactive Module'},{cat:'lead',text:'Leadership Interactive Module'}],
+  'C/TSgt':  [{cat:'ae',text:'Aerospace Education Module 6 — Aircraft Systems'},{cat:'lead',text:'Leadership Module 6 — NCO Responsibilities'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 6 — Mentorship and Respect'},{cat:'lead',text:'Active Participation'},{cat:'lead',text:'Drill Evaluation'},{cat:'lead',text:'Staff Service'}],
+  'C/MSgt':  [{cat:'ae',text:'Aerospace Education Module 7 — The Space Environment'},{cat:'lead',text:'Leadership Module 7 — Senior NCO Leadership'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 7 — Moral Courage'},{cat:'lead',text:'Active Participation'},{cat:'lead',text:'Staff Service'}],
+  'C/SMSgt': [{cat:'ae',text:'Aerospace Education Module 8 — Rocketry and Propulsion'},{cat:'lead',text:'Leadership Module 8 — Counseling and Advising'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 8 — Character in Action'},{cat:'lead',text:'Active Participation'},{cat:'lead',text:'Staff Service'}],
+  'C/CMSgt': [{cat:'ae',text:'Aerospace Education Module 9 — Global, Space and Cyber Operations'},{cat:'lead',text:'Leadership Module 9 — Transition to Officer Leadership'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 9 — The Officer Ethic'},{cat:'lead',text:'Active Participation'},{cat:'spec',text:'Billy Mitchell Award Written Examination'},{cat:'spec',text:"Commander's Review Board"}],
+  'C/2d Lt': [{cat:'ae',text:'Aerospace Education Module 10 — Aerospace Medicine'},{cat:'lead',text:'Leadership Module 10 — Officer Development I'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 10 — Professional Conduct'},{cat:'lead',text:'Active Participation'},{cat:'spec',text:'Earhart Award Application'}],
+  'C/1st Lt':[{cat:'ae',text:'Aerospace Education Module 11 — Advanced Aeronautics'},{cat:'lead',text:'Leadership Module 11 — Officer Development II'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 11 — Leadership Legacy'},{cat:'lead',text:'Active Participation'}],
+  'C/Capt':  [{cat:'ae',text:'Aerospace Education Module 12 — Modern Aviation and Defense'},{cat:'lead',text:'Leadership Module 12 — Strategic Leadership'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 12 — Character Under Pressure'},{cat:'lead',text:'Active Participation'}],
+  'C/Maj':   [{cat:'ae',text:'Aerospace Education Module 13 — Future of Flight'},{cat:'lead',text:'Leadership Module 13 — Organizational Command'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 13 — Vision and Values'},{cat:'lead',text:'Active Participation'},{cat:'spec',text:'Eaker Award Application and Review'}],
+  'C/Lt Col':[{cat:'ae',text:'Aerospace Education Module 14 — Advanced Aerospace Studies'},{cat:'lead',text:'Leadership Module 14 — Senior Officer Capstone'},{cat:'fit',text:'CPFT — Physical Fitness Assessment'},{cat:'char',text:'Character Forum 14 — Cadet Program Legacy'},{cat:'lead',text:'Active Participation'},{cat:'spec',text:'Spaatz Award Written Examination'},{cat:'spec',text:'National Headquarters Board Review'}],
+  'C/Col':   [{cat:'spec',text:'Maintain active participation as a senior program leader'},{cat:'spec',text:'Mentor junior cadets through the promotion program'}],
+};
+
+// Columns from e-services report → requirement definition
+const ESVCS_REQS = [
+  { col:'CadetOath',                     cat:'char', label:'Cadet Oath',                          score: null },
+  { col:'CharacterDevelopment',          cat:'char', label:'Character Development',               score: null },
+  { col:'WelcomeCourseDate',             cat:'lead', label:'Welcome Course',                      score: null },
+  { col:'LeadershipExpectationsDate',    cat:'lead', label:'Leadership Expectations',             score: null },
+  { col:'UniformDate',                   cat:'lead', label:'Uniform Inspection',                  score: null },
+  { col:'LeadLabDateP',                  cat:'lead', label:'Leadership Lab',                      score:'LeadLabScore' },
+  { col:'LeadershipInteractiveDate',     cat:'lead', label:'Leadership Interactive Module',       score: null },
+  { col:'DrillDate',                     cat:'lead', label:'Drill Evaluation',                    score:'DrillScore' },
+  { col:'StaffServiceDate',              cat:'lead', label:'Staff Service',                       score: null },
+  { col:'OralPresentationDate',          cat:'spec', label:'Oral Presentation',                   score: null },
+  { col:'EssayDate',                     cat:'spec', label:'Essay',                               score: null },
+  { col:'SpeechDate',                    cat:'spec', label:'Speech',                              score: null },
+  { col:'TechnicalWritingAssignmentDate',cat:'spec', label:'Technical Writing Assignment',        score:'TechnicalWritingAssignment' },
+  { col:'ActivePart',                    cat:'lead', label:'Active Participation',                score: null },
+  { col:'ActiveParticipationDate',       cat:'lead', label:'Active Participation Date Verified',  score: null },
+  { col:'PhyFitTest',                    cat:'fit',  label:'Physical Fitness Test (CPFT)',         score: null },
+  { col:'AEDateP',                       cat:'ae',   label:'Aerospace Education Written Test',    score:'AEScore',   moduleCol:'AEModuleOrTest' },
+  { col:'AEInteractiveDate',             cat:'ae',   label:'AE Interactive Module',               score: null,       moduleCol:'AEInteractiveModule' },
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let cadets   = [];   // { name, rank, capid?, nextApproval?, reqs: [{cat,text,done,detail}] }
+let checks   = {};   // for manual mode
+let isEsvcs  = false;
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.mode-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+// ─── DRAG AND DROP ────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragging');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFileSelect(file);
+});
+
+function handleFileSelect(file) {
+  if (!file || !file.name.match(/\.xlsx?$/i)) {
+    toast('Please drop an Excel (.xlsx) file exported from e-Services.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => parseExcel(e.target.result, file.name);
+  reader.readAsArrayBuffer(file);
+}
+
+function parseExcel(buffer, filename) {
+  try {
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
+
+    if (!rows.length || !rows[0].hasOwnProperty('CAPID')) {
+      toast('File format not recognized. Use the Cadet Full Track Report from e-Services.');
+      return;
+    }
+
+    const parsed = rows.map(r => buildCadetFromRow(r)).filter(Boolean);
+
+    if (!parsed.length) { toast('No cadet records found in the file.'); return; }
+
+    cadets = parsed;
+    isEsvcs = true;
+    document.getElementById('fileLoadedBar').classList.add('show');
+    document.getElementById('fileLoadedName').textContent = filename + ' — ' + parsed.length + ' cadets loaded';
+    renderAll();
+    toast(`${parsed.length} cadet tracker${parsed.length !== 1 ? 's' : ''} loaded from e-Services report.`);
+  } catch(err) {
+    console.error(err);
+    toast('Could not read the file. Make sure it is the Cadet Full Track Report.');
+  }
+}
+
+function buildCadetFromRow(r) {
+  const achvRaw = (r['AchvName'] || '').trim().toLowerCase();
+  const rank = ACHV_TO_RANK[achvRaw]
+            || Object.keys(ACHV_TO_RANK).find(k => achvRaw.includes(k) && ACHV_TO_RANK[k])
+               && ACHV_TO_RANK[Object.keys(ACHV_TO_RANK).find(k => achvRaw.includes(k))]
+            || null;
+
+  if (!rank) return null;
+
+  const name = [(r['NameFirst']||'').trim(), (r['NameLast']||'').trim()].filter(Boolean).join(' ') || 'Unknown Cadet';
+  const capid = r['CAPID'] ? String(r['CAPID']).trim() : null;
+  const nextApproval = r['NextApprovalDate'] ? String(r['NextApprovalDate']).trim() : null;
+
+  // Build requirement list from actual columns
+  const reqs = [];
+  ESVCS_REQS.forEach(def => {
+    const val = r[def.col];
+    if (val === null || val === undefined) return; // column not present — skip
+    const done = isComplete(val);
+    // Don't show if false/0/null/empty and it's a very noisy column
+    // Only include if done OR it's a "core" field that should always show
+    const alwaysShow = ['CadetOath','ActivePart','PhyFitTest','LeadLabDateP','AEDateP','CharacterDevelopment','WelcomeCourseDate'];
+    if (!done && !alwaysShow.includes(def.col)) {
+      // Show pending items too — every field that exists in the report
+      // Only skip ActiveParticipationDate if ActivePart is also shown
+      if (def.col === 'ActiveParticipationDate') return;
+    }
+
+    let detail = '';
+    if (done) {
+      // Score info
+      if (def.score && r[def.score] && isComplete(r[def.score])) {
+        const scoreVal = r[def.score];
+        if (!isNaN(parseFloat(scoreVal)) && parseFloat(scoreVal) > 0) detail = 'Score: ' + scoreVal;
+        else if (typeof scoreVal === 'string' && scoreVal.trim()) detail = scoreVal.trim().substring(0, 20);
+      }
+      // Module info
+      if (def.moduleCol && r[def.moduleCol] && isComplete(r[def.moduleCol])) {
+        const mod = String(r[def.moduleCol]).trim();
+        if (mod && mod !== '0') detail = 'Module ' + mod;
+      }
+      // Date info
+      if (!detail && typeof val === 'string' && val.match(/\d{1,2} \w+ \d{4}/)) {
+        detail = val.trim();
+      }
+    }
+
+    reqs.push({ cat: def.cat, text: def.label, done, detail, locked: true });
+  });
+
+  return { name: cap(name), rank, capid, nextApproval, reqs };
+}
+
+function isComplete(val) {
+  if (val === null || val === undefined) return false;
+  if (typeof val === 'boolean') return val;
+  if (val instanceof Date) return true;
+  const s = String(val).trim();
+  if (!s || s === '0' || s.toLowerCase() === 'false' || s.toLowerCase() === 'nan') return false;
+  return true;
+}
+
+function clearFile() {
+  document.getElementById('fileLoadedBar').classList.remove('show');
+  document.getElementById('fileInput').value = '';
+  clearAll();
+}
+
+// ─── MANUAL PARSE ─────────────────────────────────────────────────────────────
+function parseManual() {
+  const raw = document.getElementById('rosterInput').value.trim();
+  if (!raw) { toast('Enter at least one cadet.'); return; }
+  const lines = raw.split('\n').filter(l => l.trim());
+  const parsed = []; const skipped = [];
+  lines.forEach((line, i) => {
+    const l = line.trim(); if (!l) return;
+    const m = l.match(/\bC\/(AB|Amn|A1C|SrA|SSgt|TSgt|MSgt|SMSgt|CMSgt|2d\s?Lt|1st\s?Lt|Capt|Maj|Lt\s?Col|Col)\b/i);
+    if (!m) { skipped.push(i+1); return; }
+    const rank = normalizeRank(m[0]);
+    const name = cap(l.replace(m[0],'').replace(/[-—,|]/g,' ').replace(/\s+/g,' ').trim() || 'Unknown Cadet');
+    const staticR = (STATIC_REQS[rank] || []).map(r => ({ ...r, done: false, locked: false }));
+    parsed.push({ name, rank, capid: null, nextApproval: null, reqs: staticR });
+  });
+  if (!parsed.length) { toast('No valid cadets found. Check rank format.'); return; }
+  cadets = parsed; isEsvcs = false;
+  checks = {};
+  renderAll();
+  toast(skipped.length
+    ? `${parsed.length} tracker${parsed.length!==1?'s':''} generated. ${skipped.length} line${skipped.length!==1?'s':''} skipped.`
+    : `${parsed.length} tracker${parsed.length!==1?'s':''} generated.`);
+}
+
+function normalizeRank(r) {
+  const m={'c/ab':'C/AB','c/amn':'C/Amn','c/a1c':'C/A1C','c/sra':'C/SrA','c/ssgt':'C/SSgt','c/tsgt':'C/TSgt','c/msgt':'C/MSgt','c/smsgt':'C/SMSgt','c/cmsgt':'C/CMSgt','c/2d lt':'C/2d Lt','c/2dlt':'C/2d Lt','c/1st lt':'C/1st Lt','c/1stlt':'C/1st Lt','c/capt':'C/Capt','c/maj':'C/Maj','c/lt col':'C/Lt Col','c/ltcol':'C/Lt Col','c/col':'C/Col'};
+  return m[r.toLowerCase().replace(/\s+/g,' ').trim()]||r;
+}
+function cap(s){ return s.replace(/\b\w/g,c=>c.toUpperCase()).replace(/,\s*$/,'').trim(); }
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function renderAll() {
+  const grid = document.getElementById('grid');
+  const hdr  = document.getElementById('rosterHeader');
+  grid.innerHTML = '';
+
+  if (!cadets.length) {
+    grid.innerHTML = '<div class="empty-state"><h3>No Roster Loaded</h3><p>Drop an e-Services report above, or use the Manual Entry tab.</p></div>';
+    hdr.style.display = 'none'; return;
+  }
+
+  hdr.style.display = '';
+  const offCount  = cadets.filter(c => OFFICER.includes(c.rank)).length;
+  const totalReqs = cadets.reduce((a,c) => a + c.reqs.length, 0);
+  document.getElementById('sTotal').textContent = cadets.length;
+  document.getElementById('sEnl').textContent   = cadets.length - offCount;
+  document.getElementById('sOff').textContent   = offCount;
+  document.getElementById('sReqs').textContent  = totalReqs;
+
+  cadets.forEach((c, i) => {
+    const key = `${c.name}__${i}`;
+    if (!checks[key]) checks[key] = {};
+    grid.appendChild(buildCard(c, i, key));
+  });
+}
+
+function buildCard(c, i, key) {
+  const promo  = PROMOTIONS[c.rank] || PROMOTIONS['C/Col'];
+  const isOff  = OFFICER.includes(c.rank);
+  const isMax  = c.rank === 'C/Col';
+  const reqs   = c.reqs;
+  const total  = reqs.length;
+  const done   = reqs.filter(r => r.locked ? r.done : checks[key][reqs.indexOf(r)]).length;
+  const pct    = total > 0 ? Math.round(done/total*100) : 0;
+  const sk     = key.replace(/[\s']/g,'_');
+
+  const div = document.createElement('div');
+  div.className = 'cadet-card' + (isOff ? ' officer' : '');
+  div.dataset.isOff = isOff;
+  div.dataset.pct   = pct;
+  div.dataset.key   = key;
+
+  // Group reqs by category
+  let lastCat = null, reqsHTML = '';
+  reqs.forEach((r, ri) => {
+    const isDone = r.locked ? r.done : (checks[key][ri] || false);
+    if (r.cat !== lastCat) {
+      lastCat = r.cat;
+      reqsHTML += `<div class="req-section-head">${CAT_NAMES[r.cat]||r.cat}</div>`;
+    }
+    const cls = 'req-row' + (isDone ? ' done' : '') + (r.locked ? ' static' : '');
+    const onClick = r.locked ? '' : `onclick="toggle('${key}',${ri})"`;
+    const detail = r.detail ? `<span class="req-detail">${r.detail}</span>` : '';
+    reqsHTML += `<div class="${cls}" id="r_${sk}_${ri}" ${onClick}>
+      <div class="req-box"></div>
+      <div class="req-text">${r.text}</div>
+      ${detail}
+    </div>`;
+  });
+
+  div.innerHTML = `
+    <div class="card-top">
+      <div>
+        <div class="cadet-name">${c.name}</div>
+        <div class="cadet-sub">
+          <span class="cadet-rank-full">${RANK_FULL[c.rank]||c.rank}</span>
+          ${c.capid ? `<span class="capid-badge">CAPID ${c.capid}</span>` : ''}
+        </div>
+      </div>
+      <div class="rank-abbr">${c.rank}</div>
+    </div>
+    <div class="card-meta">
+      <div class="achievement-label">${promo.achievement}</div>
+      <div class="card-meta-right">
+        <div class="next-rank-label">${isMax ? 'Top Grade Achieved' : 'Next: <strong>'+promo.next+'</strong>'}</div>
+        ${c.nextApproval ? `<div class="next-approval">Eligible: <strong>${c.nextApproval}</strong></div>` : ''}
+      </div>
+    </div>
+    <div class="prog-bar-wrap">
+      <div class="prog-bar-fill" id="bar_${sk}" style="width:${pct}%"></div>
+    </div>
+    <div class="req-list">${reqsHTML}</div>
+    <div class="card-foot">
+      <span class="card-foot-count" id="cnt_${sk}">${done}/${total} completed</span>
+      <span class="card-foot-pct${pct===100?' complete':''}" id="pct_${sk}">${pct}%</span>
+      ${!isEsvcs ? `<button class="reset-link" onclick="resetCard('${key}')">Reset</button>` : '<span></span>'}
+    </div>`;
+
+  return div;
+}
+
+function toggle(key, ri) {
+  if (!checks[key]) checks[key] = {};
+  checks[key][ri] = !checks[key][ri];
+  const sk = key.replace(/[\s']/g,'_');
+  const el = document.getElementById(`r_${sk}_${ri}`);
+  if (el) el.classList.toggle('done', checks[key][ri]);
+  recalcFooter(key);
+  const card = document.querySelector(`[data-key="${key}"]`);
+  if (card) card.dataset.pct = calcPct(key);
+}
+
+function calcPct(key) {
+  const idx  = parseInt(key.split('__').pop());
+  const c    = cadets[idx];
+  if (!c) return 0;
+  const total = c.reqs.length;
+  if (!total) return 0;
+  const done = c.reqs.filter((r, ri) => r.locked ? r.done : (checks[key][ri]||false)).length;
+  return Math.round(done/total*100);
+}
+
+function recalcFooter(key) {
+  const idx   = parseInt(key.split('__').pop());
+  const c     = cadets[idx]; if (!c) return;
+  const sk    = key.replace(/[\s']/g,'_');
+  const total = c.reqs.length;
+  const done  = c.reqs.filter((r,ri) => r.locked ? r.done : (checks[key][ri]||false)).length;
+  const pct   = total > 0 ? Math.round(done/total*100) : 0;
+  const bar   = document.getElementById(`bar_${sk}`);
+  const cnt   = document.getElementById(`cnt_${sk}`);
+  const pctEl = document.getElementById(`pct_${sk}`);
+  if (bar)   bar.style.width = pct + '%';
+  if (cnt)   cnt.textContent = `${done}/${total} completed`;
+  if (pctEl) { pctEl.textContent = pct + '%'; pctEl.className = 'card-foot-pct' + (pct===100?' complete':''); }
+}
+
+function resetCard(key) {
+  checks[key] = {};
+  const sk  = key.replace(/[\s']/g,'_');
+  document.querySelectorAll(`[id^="r_${sk}_"]`).forEach(el => el.classList.remove('done'));
+  recalcFooter(key);
+  const card = document.querySelector(`[data-key="${key}"]`);
+  if (card) card.dataset.pct = 0;
+}
+
+// ─── FILTER ───────────────────────────────────────────────────────────────────
+function doFilter(type, btn) {
+  document.querySelectorAll('.ftag').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.cadet-card').forEach(card => {
+    let show = true;
+    if (type==='enlisted') show = card.dataset.isOff==='false';
+    if (type==='officer')  show = card.dataset.isOff==='true';
+    if (type==='inprog')   show = parseInt(card.dataset.pct)<100;
+    card.style.display = show?'':'none';
+  });
+}
+
+// ─── MISC ─────────────────────────────────────────────────────────────────────
+function loadSample() {
+  document.getElementById('rosterInput').value =
+`Smith, Jordan — C/SrA
+Patel, Anika — C/SSgt
+Nguyen, Marcus — C/CMSgt
+Rivera, Sofia — C/2d Lt
+Thompson, Blake — C/Amn`;
+  parseManual();
+}
+
+function clearAll() {
+  document.getElementById('rosterInput').value='';
+  cadets=[]; checks={}; isEsvcs=false;
+  document.getElementById('grid').innerHTML='<div class="empty-state"><h3>No Roster Loaded</h3><p>Drop an e-Services report above, or use the Manual Entry tab.</p></div>';
+  document.getElementById('rosterHeader').style.display='none';
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
